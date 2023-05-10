@@ -53,7 +53,7 @@ const AddRepoMetadata: FC<{ onDidAdd: () => void; repoID: string }> = ({ onDidAd
             variables: {
                 repo: repoID,
                 key,
-                value,
+                value: value || null,
             },
         })
             .then(() => {
