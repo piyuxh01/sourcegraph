@@ -365,6 +365,8 @@ type Server struct {
 	// The factory creates recordable commands with a set predicate, which is used to determine whether a
 	// particular command should be recorded or not.
 	recordingCommandFactory *wrexec.RecordingCommandFactory
+
+	PerforceChangelistMappingQueue *perforceChangelistMappingQueue
 }
 
 type locks struct {
@@ -2669,6 +2671,9 @@ func (s *Server) doRepoUpdate(ctx context.Context, repo api.RepoName, revspec st
 
 	select {
 	case <-done:
+		if err != nil {
+			s.PerforceChangelistMappingQueue.push(&perforceChangelistMappingJob{repo: repo})
+		}
 		return errors.Wrapf(err, "repo %s:", repo)
 	case <-ctx.Done():
 		span.LogFields(otlog.String("event", "context canceled"))
