@@ -43,7 +43,9 @@ func parseP4FusionCommitSubject(subject string) (string, error) {
 	return matches[2], nil
 }
 
-// Either git-p4 or p4-fusion could be used to convert a perforce depot to a git repo. In which case the
+// Either git-p4 or p4-fusion could have been used to convert a perforce depot to a git repo. In
+// which case the commit message would look like:
+//
 // [git-p4: depot-paths = "//test-perms/": change = 83725]
 // [p4-fusion: depot-paths = "//test-perms/": change = 80972]
 var gitP4Pattern = lazyregexp.New(`\[(?:git-p4|p4-fusion): depot-paths = "(.*?)"\: change = (\d+)\]`)
