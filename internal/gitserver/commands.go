@@ -1891,6 +1891,20 @@ func parseCommitLogOutput(data []byte, nameOnly bool) ([]*wrappedCommit, error) 
 	return commits, nil
 }
 
+func ParseGitLogOutput(data []byte) ([]*gitdomain.Commit, error) {
+	wrappedCommits, err := parseCommitLogOutput(data, false)
+	if err != nil {
+		return nil, err
+	}
+
+	commits := make([]*gitdomain.Commit, len(wrappedCommits))
+	for i, c := range wrappedCommits {
+		commits[i] = c.Commit
+	}
+
+	return commits, nil
+}
+
 type wrappedCommit struct {
 	*gitdomain.Commit
 	files []string
