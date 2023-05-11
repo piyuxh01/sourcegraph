@@ -266,6 +266,7 @@ require (
 require (
 	github.com/go-redsync/redsync/v4 v4.8.1
 	github.com/jackc/pgerrcode v0.0.0-20220416144525-469b46aa5efa
+	github.com/mitchellh/go-homedir v1.1.0
 )
 
 require (

@@ -1358,6 +1358,15 @@ type LlmProxy struct {
 	BigQueryTable string `json:"bigQueryTable,omitempty"`
 }
 
+// LocalExternalService description: Configuration for integration local Git repositories.
+type LocalExternalService struct {
+	Repos []*LocalRepoPattern `json:"repos,omitempty"`
+}
+type LocalRepoPattern struct {
+	Group   string `json:"group,omitempty"`
+	Pattern string `json:"pattern,omitempty"`
+}
+
 // Log description: Configuration for logging and alerting, including to external services.
 type Log struct {
 	// AuditLog description: EXPERIMENTAL: Configuration for audit logging (specially formatted log entries for tracking sensitive events)

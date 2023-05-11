@@ -141,6 +141,7 @@ const (
 	KindAzureDevOps     = "AZUREDEVOPS"
 	KindSCIM            = "SCIM"
 	KindOther           = "OTHER"
+	KindLocal           = "LOCAL"
 )
 
 const (
@@ -205,6 +206,9 @@ const (
 
 	// TypeOther is the (api.ExternalRepoSpec).ServiceType value for other projects.
 	TypeOther = "other"
+
+	// TypeLocal is the (api.ExternalRepoSpec).ServiceType value for localhost repositories.
+	TypeLocal = "local"
 )
 
 // KindToType returns a Type constants given a Kind
@@ -247,6 +251,8 @@ func KindToType(kind string) string {
 		return TypeAzureDevOps
 	case KindOther:
 		return TypeOther
+	case KindLocal:
+		return TypeLocal
 	default:
 		panic(fmt.Sprintf("unknown kind: %q", kind))
 	}
@@ -292,6 +298,8 @@ func TypeToKind(t string) string {
 		return KindAzureDevOps
 	case TypeOther:
 		return KindOther
+	case TypeLocal:
+		return KindLocal
 	default:
 		panic(fmt.Sprintf("unknown type: %q", t))
 	}
@@ -349,6 +357,8 @@ func ParseServiceType(s string) (string, bool) {
 		return TypeAzureDevOps, true
 	case TypeOther:
 		return TypeOther, true
+	case TypeLocal:
+		return TypeLocal, true
 	default:
 		return "", false
 	}
@@ -392,6 +402,8 @@ func ParseServiceKind(s string) (string, bool) {
 		return KindAzureDevOps, true
 	case KindOther:
 		return KindOther, true
+	case TypeLocal:
+		return TypeLocal, true
 	default:
 		return "", false
 	}
@@ -491,6 +503,8 @@ func getConfigPrototype(kind string) (any, error) {
 		return &schema.RubyPackagesConnection{}, nil
 	case KindOther:
 		return &schema.OtherExternalServiceConnection{}, nil
+	case KindLocal:
+		return &schema.LocalExternalService{}, nil
 	default:
 		return nil, errors.Errorf("unknown external service kind %q", kind)
 	}
@@ -807,6 +821,8 @@ func uniqueCodeHostIdentifier(kind string, cfg any) (string, error) {
 		return KindRubyPackages, nil
 	case *schema.PagureConnection:
 		rawURL = c.Url
+	case *schema.LocalExternalService:
+		return "localhost", nil
 	default:
 		return "", errors.Errorf("unknown external service kind: %s", kind)
 	}
