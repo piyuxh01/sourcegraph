@@ -22,11 +22,12 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/format/config"
 	"github.com/golang/groupcache/lru"
 	"github.com/opentracing/opentracing-go/ext"
-	"github.com/opentracing/opentracing-go/log"
+	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/sourcegraph/go-diff/diff"
+	"github.com/sourcegraph/log"
 
 	"github.com/sourcegraph/sourcegraph/internal/actor"
 	"github.com/sourcegraph/sourcegraph/internal/api"
@@ -1872,7 +1873,9 @@ var runCommitLog = func(ctx context.Context, cmd GitCommand, opt CommitsOptions)
 }
 
 func parseCommitLogOutput(data []byte, nameOnly bool) ([]*wrappedCommit, error) {
+	logger := log.Scoped("parseCommitLogOutput", "")
 	allParts := bytes.Split(data, []byte{'\x00'})
+	logger.Warn("allParts breakdown", log.Int("length", len(allParts)))
 	partsPerCommit := partsPerCommitBasic
 	if nameOnly {
 		partsPerCommit = partsPerCommitWithFileNames
@@ -2467,7 +2470,7 @@ func (c *clientImplementor) ArchiveReader(
 	defer func() {
 		if err != nil {
 			ext.Error.Set(span, true)
-			span.LogFields(log.Error(err))
+			span.LogFields(otlog.Error(err))
 		}
 		span.Finish()
 	}()
