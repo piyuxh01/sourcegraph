@@ -28,6 +28,7 @@ All notable changes to Sourcegraph are documented in this file.
 - Support for custom HTML injection behind an environment variable (`ENABLE_INJECT_HTML`). This allows users to enable or disable HTML customization as needed, which is now disabled by default. [#51400](https://github.com/sourcegraph/sourcegraph/pull/51400)
 - Added the ability to block auto-indexing scheduling and inference via the `codeintel_autoindexing_exceptions` Postgres table. [#51578](https://github.com/sourcegraph/sourcegraph/pull/51578)
 - When an admin has configured rollout windows for Batch Changes changesets, the configuration details are now visible to all users on the Batch Changes settings page. [#50479](https://github.com/sourcegraph/sourcegraph/pull/50479)
+- Latest repository clone/sync job output is surfaced in the "Mirroring and cloning" page (`{REPO}/-/settings/mirror`). Added primarily to enable easier debugging of issues with Perforce depots, it can also be useful for other code hosts. [#51598](https://github.com/sourcegraph/sourcegraph/pull/51598)
 
 ### Changed
 
