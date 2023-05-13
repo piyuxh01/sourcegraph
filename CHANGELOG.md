@@ -29,6 +29,7 @@ All notable changes to Sourcegraph are documented in this file.
 - Added the ability to block auto-indexing scheduling and inference via the `codeintel_autoindexing_exceptions` Postgres table. [#51578](https://github.com/sourcegraph/sourcegraph/pull/51578)
 - When an admin has configured rollout windows for Batch Changes changesets, the configuration details are now visible to all users on the Batch Changes settings page. [#50479](https://github.com/sourcegraph/sourcegraph/pull/50479)
 - Added support for regular expressions in`exclude` repositories for GitLab code host connections. [#51862](https://github.com/sourcegraph/sourcegraph/pull/51862)
+- OOM reaper events affecting `p4-fusion` jobs on `gitserver` are better detected and handled. Error (non-zero) exit status is used, and the resource (CPU, memory) usage of the job process is appended to the job output so that admins can infer possible OOM activity and take steps to address it. [#51284](https://github.com/sourcegraph/sourcegraph/pull/51284)
 
 ### Changed
 
