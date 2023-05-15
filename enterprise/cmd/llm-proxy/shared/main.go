@@ -10,6 +10,7 @@ import (
 	"github.com/go-redsync/redsync/v4/redis/redigo"
 	"github.com/gorilla/mux"
 	"github.com/sourcegraph/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/sourcegraph/sourcegraph/enterprise/cmd/llm-proxy/internal/events"
 	"github.com/sourcegraph/sourcegraph/internal/goroutine"
@@ -79,7 +80,11 @@ func Main(ctx context.Context, obctx *observation.Context, ready service.ReadyFu
 
 	// Instrumentation layers
 	handler = httpLogger(obctx.Logger.Scoped("httpAPI", ""), handler)
-	handler = instrumentation.HTTPMiddleware("llm-proxy", handler)
+	handler = instrumentation.HTTPMiddleware("llm-proxy", handler,
+		// This is typically deployed as a separate environment with a public API,
+		// so we want to represent parent traces as links rather than direct child
+		// associations.
+		otelhttp.WithPublicEndpoint())
 
 	// Collect request client for downstream handlers. Outside of dev, we always set up
 	// Cloudflare in from of LLM-proxy. This comes first.
