@@ -1030,7 +1030,7 @@ type RepoMetadataAggregatedStatsPeriod struct {
 }
 
 type EventStats struct {
-	UserCount   *int32
+	UsersCount  *int32
 	EventsCount *int32
 }
 
