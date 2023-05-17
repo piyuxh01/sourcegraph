@@ -94,6 +94,10 @@ func Main(ctx context.Context, observationCtx *observation.Context, ready servic
 	}
 	db := database.NewDB(logger, sqlDB)
 
+	if err := tryAutoUpgrade(ctx, logger, db); err != nil {
+		return errors.Wrap(err, "frontend.tryAutoUpgradeg")
+	}
+
 	if os.Getenv("SRC_DISABLE_OOBMIGRATION_VALIDATION") != "" {
 		if !deploy.IsApp() {
 			logger.Warn("Skipping out-of-band migrations check")
