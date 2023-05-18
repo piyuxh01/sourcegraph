@@ -28,6 +28,7 @@ go_library(
     deps = [
         "//enterprise/internal/batches/sources/azuredevops",
         "//enterprise/internal/batches/sources/bitbucketcloud",
+        "//enterprise/internal/batches/sources/perforce",
         "//internal/api",
         "//internal/api/internalapi",
         "//internal/conf",
@@ -41,6 +42,7 @@ go_library(
         "//internal/extsvc/github",
         "//internal/extsvc/gitlab",
         "//internal/extsvc/gitlab/webhooks",
+        "//internal/extsvc/perforce",
         "//internal/gitserver/gitdomain",
         "//internal/timeutil",
         "//internal/types",

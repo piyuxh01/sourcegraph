@@ -9,6 +9,7 @@ go_library(
         "common.go",
         "github.go",
         "gitlab.go",
+        "perforce.go",
         "sources.go",
         "util.go",
     ],
