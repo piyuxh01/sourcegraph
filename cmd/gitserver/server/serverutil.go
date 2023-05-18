@@ -163,6 +163,10 @@ func getTlsExternalDoNotInvoke() *tlsConfig {
 // This creates a long lived
 var tlsExternal = conf.Cached(getTlsExternalDoNotInvoke)
 
+func RunWith(ctx context.Context, cmd wrexec.Cmder, configRemoteOpts bool, progress io.Writer) ([]byte, error) {
+	return runWith(ctx, cmd, configRemoteOpts, progress)
+}
+
 // runWith runs the command after applying the remote options. If progress is not
 // nil, all output is written to it in a separate goroutine.
 func runWith(ctx context.Context, cmd wrexec.Cmder, configRemoteOpts bool, progress io.Writer) ([]byte, error) {
@@ -181,6 +185,8 @@ func runWith(ctx context.Context, cmd wrexec.Cmder, configRemoteOpts bool, progr
 
 	logger := log.Scoped("runWith", "runWith runs the command after applying the remote options")
 
+	var errBuf bytes.Buffer
+
 	if progress != nil {
 		var pw progressWriter
 		r, w := io.Pipe()
@@ -197,11 +203,16 @@ func runWith(ctx context.Context, cmd wrexec.Cmder, configRemoteOpts bool, progr
 	} else {
 		var buf bytes.Buffer
 		cmd.Unwrap().Stdout = &buf
-		cmd.Unwrap().Stderr = &buf
+		cmd.Unwrap().Stderr = &errBuf
 		b = &buf
 	}
 
-	_, err := runCommand(ctx, cmd) // TODO
+	exitCode, err := runCommand(ctx, cmd)
+	if err != nil {
+		fmt.Println("here is the error >>>>>>>>>>>>>", string(errBuf.Bytes()))
+		err = errors.Wrapf(err, "exit status: %s", exitCode)
+	}
+
 	return b.Bytes(), err
 }
 
