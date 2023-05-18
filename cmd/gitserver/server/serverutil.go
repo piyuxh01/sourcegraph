@@ -185,8 +185,6 @@ func runWith(ctx context.Context, cmd wrexec.Cmder, configRemoteOpts bool, progr
 
 	logger := log.Scoped("runWith", "runWith runs the command after applying the remote options")
 
-	var errBuf bytes.Buffer
-
 	if progress != nil {
 		var pw progressWriter
 		r, w := io.Pipe()
@@ -203,15 +201,11 @@ func runWith(ctx context.Context, cmd wrexec.Cmder, configRemoteOpts bool, progr
 	} else {
 		var buf bytes.Buffer
 		cmd.Unwrap().Stdout = &buf
-		cmd.Unwrap().Stderr = &errBuf
+		cmd.Unwrap().Stderr = &buf
 		b = &buf
 	}
 
-	exitCode, err := runCommand(ctx, cmd)
-	if err != nil {
-		fmt.Println("here is the error >>>>>>>>>>>>>", string(errBuf.Bytes()))
-		err = errors.Wrapf(err, "exit status: %s", exitCode)
-	}
+	_, err := runCommand(ctx, cmd) // TODO
 
 	return b.Bytes(), err
 }
