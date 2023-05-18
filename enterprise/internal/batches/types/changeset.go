@@ -15,6 +15,7 @@ import (
 
 	adobatches "github.com/sourcegraph/sourcegraph/enterprise/internal/batches/sources/azuredevops"
 	bbcs "github.com/sourcegraph/sourcegraph/enterprise/internal/batches/sources/bitbucketcloud"
+	p4batches "github.com/sourcegraph/sourcegraph/enterprise/internal/batches/sources/perforce"
 	"github.com/sourcegraph/sourcegraph/internal/api"
 	"github.com/sourcegraph/sourcegraph/internal/extsvc"
 	"github.com/sourcegraph/sourcegraph/internal/extsvc/bitbucketcloud"
@@ -451,7 +452,23 @@ func (c *Changeset) SetMetadata(meta any) error {
 			c.ExternalForkNamespace = ""
 			c.ExternalForkName = ""
 		}
+	case *p4batches.AnnotatedPullRequest:
+		// TODO: implement this correctly
+		// BCC from ADO-land
+		c.Metadata = pr
+		c.ExternalID = strconv.Itoa(pr.ID)
+		c.ExternalServiceType = extsvc.TypeAzureDevOps
+		c.ExternalBranch = gitdomain.EnsureRefPrefix(pr.SourceRefName)
+		// PErforce does not have a last updated at field on its PR objects, so we set the creation time.
+		c.ExternalUpdatedAt = pr.CreationDate
 
+		if pr.ForkSource != nil {
+			c.ExternalForkNamespace = pr.ForkSource.Repository.Namespace()
+			c.ExternalForkName = pr.ForkSource.Repository.Name
+		} else {
+			c.ExternalForkNamespace = ""
+			c.ExternalForkName = ""
+		}
 	default:
 		return errors.New("unknown changeset type")
 	}
@@ -481,6 +498,9 @@ func (c *Changeset) Title() (string, error) {
 		return m.Title, nil
 	case *adobatches.AnnotatedPullRequest:
 		return m.Title, nil
+	case *p4batches.AnnotatedPullRequest:
+		// TODO; review choice here
+		return m.Title, nil
 	default:
 		return "", errors.New("unknown changeset type")
 	}
@@ -503,6 +523,9 @@ func (c *Changeset) AuthorName() (string, error) {
 		// check this field for backwards compatibility.
 		return m.Author.Username, nil
 	case *adobatches.AnnotatedPullRequest:
+		return m.CreatedBy.UniqueName, nil
+	case *p4batches.AnnotatedPullRequest:
+		// TODO: review choice here
 		return m.CreatedBy.UniqueName, nil
 	default:
 		return "", errors.New("unknown changeset type")
@@ -535,6 +558,9 @@ func (c *Changeset) AuthorEmail() (string, error) {
 		return "", nil
 	case *adobatches.AnnotatedPullRequest:
 		return m.CreatedBy.UniqueName, nil
+	case *p4batches.AnnotatedPullRequest:
+		//TODO: review choice here
+		return m.CreatedBy.UniqueName, nil
 	default:
 		return "", errors.New("unknown changeset type")
 	}
@@ -555,6 +581,9 @@ func (c *Changeset) ExternalCreatedAt() time.Time {
 		return m.CreatedOn
 	case *adobatches.AnnotatedPullRequest:
 		return m.CreationDate
+	case *p4batches.AnnotatedPullRequest:
+		// TODO: review choice here
+		return m.CreationDate
 	default:
 		return time.Time{}
 	}
@@ -572,6 +601,9 @@ func (c *Changeset) Body() (string, error) {
 	case *bbcs.AnnotatedPullRequest:
 		return m.Rendered.Description.Raw, nil
 	case *adobatches.AnnotatedPullRequest:
+		return m.Description, nil
+	case *p4batches.AnnotatedPullRequest:
+		// TODO: review choice here
 		return m.Description, nil
 	default:
 		return "", errors.New("unknown changeset type")
@@ -637,6 +669,9 @@ func (c *Changeset) URL() (s string, err error) {
 		}
 
 		return returnURL.String(), nil
+	case *p4batches.AnnotatedPullRequest:
+		// TODO: implement
+		return m.URL, nil
 	default:
 		return "", errors.New("unknown changeset type")
 	}
@@ -839,6 +874,9 @@ func (c *Changeset) Events() (events []*ChangesetEvent, err error) {
 				Metadata:    status,
 			})
 		}
+	case *p4batches.AnnotatedPullRequest:
+		// TODO: implement
+		return events, nil
 	}
 	return events, nil
 }
@@ -858,6 +896,9 @@ func (c *Changeset) HeadRefOid() (string, error) {
 		return m.Source.Commit.Hash, nil
 	case *adobatches.AnnotatedPullRequest:
 		return "", nil
+	case *p4batches.AnnotatedPullRequest:
+		//TODO: review choice here
+		return "", nil
 	default:
 		return "", errors.New("unknown changeset type")
 	}
@@ -876,6 +917,9 @@ func (c *Changeset) HeadRef() (string, error) {
 	case *bbcs.AnnotatedPullRequest:
 		return "refs/heads/" + m.Source.Branch.Name, nil
 	case *adobatches.AnnotatedPullRequest:
+		return m.SourceRefName, nil
+	case *p4batches.AnnotatedPullRequest:
+		// TODO: review choice here
 		return m.SourceRefName, nil
 	default:
 		return "", errors.New("unknown changeset type")
