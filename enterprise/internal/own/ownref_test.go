@@ -2,17 +2,30 @@ package own
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/sourcegraph/log/logtest"
+	"github.com/sourcegraph/sourcegraph/cmd/frontend/auth/providers"
+	"github.com/sourcegraph/sourcegraph/internal/extsvc"
+	"github.com/sourcegraph/sourcegraph/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	edb "github.com/sourcegraph/sourcegraph/enterprise/internal/database"
 	"github.com/sourcegraph/sourcegraph/internal/database"
 	"github.com/sourcegraph/sourcegraph/internal/database/dbtest"
+)
+
+const (
+	username        = "jdoe"
+	verifiedEmail   = "john.doe@example.com"
+	unverifiedEmail = "john-the-unverified@example.com"
+	gitHubLogin     = "jdoegh"
+	gitLabLogin     = "jdoegl"
+	gerritLogin     = "no"
 )
 
 func TestSearchFilteringExample(t *testing.T) {
@@ -23,12 +36,7 @@ func TestSearchFilteringExample(t *testing.T) {
 	logger := logtest.Scoped(t)
 	db := edb.NewEnterpriseDB(database.NewDB(logger, dbtest.NewDB(logger, t)))
 	ctx := context.Background()
-	user, err := db.Users().Create(ctx, database.NewUser{
-		Email:           "john.doe@example.com",
-		Username:        "jdoe",
-		EmailIsVerified: true,
-	})
-	require.NoError(t, err)
+	user, err := initUser(ctx, t, db)
 
 	// Now we add 2 verified emails.
 	testTime := time.Now().Round(time.Second).UTC()
@@ -47,7 +55,7 @@ func TestSearchFilteringExample(t *testing.T) {
 		// Some possible matching entries:
 		// email entry in CODEOWNERS
 		"email entry in CODEOWNERS": {
-			Email: "john.doe@example.com",
+			Email: verifiedEmail,
 			RepoContext: &RepoContext{
 				Name:         "github.com/sourcegraph/sourcegraph",
 				CodeHostKind: "github",
@@ -68,7 +76,7 @@ func TestSearchFilteringExample(t *testing.T) {
 			},
 		},
 		"jdoe entry in CODEOWNERS": {
-			Handle: "jdoe",
+			Handle: username,
 			RepoContext: &RepoContext{
 				Name:         "github.com/sourcegraph/sourcegraph",
 				CodeHostKind: "github",
@@ -76,6 +84,20 @@ func TestSearchFilteringExample(t *testing.T) {
 		},
 		"@jdoe entry in CODEOWNERS": {
 			Handle: "@jdoe",
+			RepoContext: &RepoContext{
+				Name:         "github.com/sourcegraph/sourcegraph",
+				CodeHostKind: "github",
+			},
+		},
+		"@jdoegh (github handle) entry in CODEOWNERS": {
+			Handle: gitHubLogin,
+			RepoContext: &RepoContext{
+				Name:         "github.com/sourcegraph/sourcegraph",
+				CodeHostKind: "github",
+			},
+		},
+		"@jdoegl (gitlab handle) entry in CODEOWNERS": {
+			Handle: gitLabLogin,
 			RepoContext: &RepoContext{
 				Name:         "github.com/sourcegraph/sourcegraph",
 				CodeHostKind: "github",
@@ -89,7 +111,7 @@ func TestSearchFilteringExample(t *testing.T) {
 	// Imagine these are searches with filters `file:has.owner(jdoe)` and
 	// `file:has.owner(john-aka-im-rich@didyouget.it)` respectively.
 	tests := map[string]struct{ searchTerm string }{
-		"Search by handle":         {searchTerm: "jdoe"},
+		"Search by handle":         {searchTerm: username},
 		"Search by verified email": {searchTerm: "john-aka-im-rich@didyouget.it"},
 	}
 	for testName, testCase := range tests {
@@ -139,7 +161,7 @@ func TestBagNoUser(t *testing.T) {
 	}
 	for name, r := range map[string]Reference{
 		"email entry in CODEOWNERS": {
-			Email: "john.doe@example.com",
+			Email: verifiedEmail,
 			RepoContext: &RepoContext{
 				Name:         "github.com/sourcegraph/sourcegraph",
 				CodeHostKind: "github",
@@ -170,19 +192,12 @@ func TestBagUserFoundNoMatches(t *testing.T) {
 	logger := logtest.Scoped(t)
 	db := edb.NewEnterpriseDB(database.NewDB(logger, dbtest.NewDB(logger, t)))
 	ctx := context.Background()
-	const verifiedEmail = "john.doe@example.com"
-	user, err := db.Users().Create(ctx, database.NewUser{
-		Email:           verifiedEmail,
-		Username:        "jdoe",
-		EmailIsVerified: true,
-	})
-	require.NoError(t, err)
+	user, err := initUser(ctx, t, db)
 	// Make user email verified.
 	err = db.UserEmails().SetVerified(ctx, user.ID, verifiedEmail, true)
 	require.NoError(t, err)
 	// Now we add 1 unverified email.
 	verificationCode := "ok"
-	const unverifiedEmail = "john-the-unverified@example.com"
 	require.NoError(t, db.UserEmails().Add(ctx, user.ID, unverifiedEmail, &verificationCode))
 
 	// Then for given file we have owner matches (translated to references here):
@@ -208,6 +223,13 @@ func TestBagUserFoundNoMatches(t *testing.T) {
 				CodeHostKind: "github",
 			},
 		},
+		"different code host handle entry in CODEOWNERS": {
+			Handle: gerritLogin,
+			RepoContext: &RepoContext{
+				Name:         "github.com/sourcegraph/sourcegraph",
+				CodeHostKind: "github",
+			},
+		},
 		"user ID from assigned ownership": {
 			UserID: user.ID + 1, // different user ID
 		},
@@ -219,7 +241,7 @@ func TestBagUserFoundNoMatches(t *testing.T) {
 		searchTerm    string
 		validationRef Reference
 	}{
-		"Search by handle":         {searchTerm: "jdoe", validationRef: Reference{Handle: "jdoe"}},
+		"Search by handle":         {searchTerm: username, validationRef: Reference{Handle: username}},
 		"Search by verified email": {searchTerm: verifiedEmail, validationRef: Reference{Email: verifiedEmail}},
 	}
 	for testName, testCase := range tests {
@@ -245,16 +267,9 @@ func TestBagUnverifiedEmailOnlyMatchesWithItself(t *testing.T) {
 	logger := logtest.Scoped(t)
 	db := edb.NewEnterpriseDB(database.NewDB(logger, dbtest.NewDB(logger, t)))
 	ctx := context.Background()
-	const verifiedEmail = "john.doe@example.com"
-	user, err := db.Users().Create(ctx, database.NewUser{
-		Email:           verifiedEmail,
-		Username:        "jdoe",
-		EmailIsVerified: true,
-	})
-	require.NoError(t, err)
+	user, err := initUser(ctx, t, db)
 	// Now we add 1 unverified email.
 	verificationCode := "ok"
-	const unverifiedEmail = "john-the-unverified@example.com"
 	require.NoError(t, db.UserEmails().Add(ctx, user.ID, unverifiedEmail, &verificationCode))
 
 	// Then for given file we have owner matches (translated to references here):
@@ -289,4 +304,51 @@ func TestBagUnverifiedEmailOnlyMatchesWithItself(t *testing.T) {
 			}
 		})
 	}
+}
+
+func initUser(ctx context.Context, t *testing.T, db edb.EnterpriseDB) (*types.User, error) {
+	user, err := db.Users().Create(ctx, database.NewUser{
+		Email:           verifiedEmail,
+		Username:        username,
+		EmailIsVerified: true,
+	})
+	require.NoError(t, err)
+	// Adding user external accounts.
+	// 1) GitHub.
+	spec := extsvc.AccountSpec{
+		ServiceType: extsvc.TypeGitHub,
+		ServiceID:   "https://github.com/",
+		AccountID:   "1337",
+	}
+	data := json.RawMessage(fmt.Sprintf(`{"login": "%s"}`, gitHubLogin))
+	accountData := extsvc.AccountData{
+		Data: extsvc.NewUnencryptedData(data),
+	}
+	require.NoError(t, db.UserExternalAccounts().Insert(ctx, user.ID, spec, accountData))
+	mockGitHubProvider := providers.MockAuthProvider{
+		MockConfigID:          providers.ConfigID{Type: extsvc.TypeGitHub},
+		MockPublicAccountData: &extsvc.PublicAccountData{Login: stringPointer(gitHubLogin)},
+	}
+	// 2) GitLab.
+	gitLabSpec := extsvc.AccountSpec{
+		ServiceType: extsvc.TypeGitLab,
+		ServiceID:   "https://gitlab.com/",
+		AccountID:   "42",
+	}
+	gitLabData := json.RawMessage(fmt.Sprintf(`{"username": "%s"}`, gitLabLogin))
+	gitLabAccountData := extsvc.AccountData{
+		Data: extsvc.NewUnencryptedData(gitLabData),
+	}
+	require.NoError(t, db.UserExternalAccounts().Insert(ctx, user.ID, gitLabSpec, gitLabAccountData))
+	gitLabMockGitHubProvider := providers.MockAuthProvider{
+		MockConfigID:          providers.ConfigID{Type: extsvc.TypeGitLab},
+		MockPublicAccountData: &extsvc.PublicAccountData{Login: stringPointer(gitLabLogin)},
+	}
+	// Adding providers to the mock.
+	providers.MockProviders = []providers.Provider{mockGitHubProvider, gitLabMockGitHubProvider}
+	return user, err
+}
+
+func stringPointer(s string) *string {
+	return &s
 }
