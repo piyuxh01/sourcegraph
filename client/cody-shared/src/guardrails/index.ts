@@ -1,3 +1,5 @@
+import { escapeMarkdown } from '@sourcegraph/common'
+
 import { parseMarkdown } from '../chat/markdown'
 import { isError } from '../utils'
 
@@ -41,8 +43,7 @@ export async function annotateAttribution(guardrails: Guardrails, text: string):
                 return `found ${count} matching repositories ${summary.join(', ')}`
             })
 
-            // TODO(keegancsmith) escape msg?
-            return `${token.raw}\n<div title="guardrails">🛡️ ${msg}</div>`
+            return `${token.raw}\n<div title="guardrails">🛡️ ${escapeMarkdown(msg)}</div>`
         })
     )
     return parts.join('')

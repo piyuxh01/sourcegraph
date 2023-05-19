@@ -99,3 +99,12 @@ export const renderMarkdown = (
 }
 
 export const markdownLexer = (markdown: string): marked.TokensList => marked.lexer(markdown)
+
+/**
+ * Escapes markdown by replacing characters like `<` with their HTML escape sequences like `&lt;`.
+ *
+ * TODO we need to handle escaping markdown special characters.
+ */
+export const escapeMarkdown = (text: string): string => {
+    return escapeHTML(text)
+}
