@@ -16,8 +16,10 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/conf/conftypes"
 	"github.com/sourcegraph/sourcegraph/internal/database"
 	"github.com/sourcegraph/sourcegraph/internal/database/locker"
+	"github.com/sourcegraph/sourcegraph/internal/database/migration/multiversion"
 	"github.com/sourcegraph/sourcegraph/internal/goroutine"
 	"github.com/sourcegraph/sourcegraph/internal/httpserver"
+	"github.com/sourcegraph/sourcegraph/internal/oobmigration"
 	"github.com/sourcegraph/sourcegraph/internal/version"
 	"github.com/sourcegraph/sourcegraph/internal/version/upgradestore"
 	"github.com/sourcegraph/sourcegraph/lib/errors"
@@ -36,16 +38,56 @@ func tryAutoUpgrade(ctx context.Context, logger log.Logger, db database.DB) (err
 		err = unlock(err)
 	}()
 
-	toVersion := version.Version()
-	currentVersion, doAutoUpgrade, err := autoupgradeStore.GetAutoUpgrade(ctx)
+	toVersion, _, ok := oobmigration.NewVersionAndPatchFromString(version.Version())
+	if !ok {
+		return nil
+	}
+	currentVersionStr, doAutoUpgrade, err := autoupgradeStore.GetAutoUpgrade(ctx)
 	if err != nil {
 		return errors.Wrap(err, "autoupgradestore.GetAutoUpgrade")
 	}
-
 	if !doAutoUpgrade {
 		return nil
 	}
 
+	currentVersion, _, ok := oobmigration.NewVersionAndPatchFromString(currentVersionStr)
+	if !ok {
+		return nil
+	}
+
+	stopFunc, err := setupConfigurationServer(ctx, logger)
+	if err != nil {
+		return err
+	}
+	defer stopFunc()
+
+	// ...
+
+	runMigration(ctx, currentVersion, toVersion, db)
+
+	return errors.New("MIGRATION SUCCEEDED, RESTARTING")
+}
+
+func runMigration(ctx context.Context, from, to oobmigration.Version, db database.DB) error {
+	versionRange, err := oobmigration.UpgradeRange(from, to)
+	if err != nil {
+		return err
+	}
+
+	interrupts, err := oobmigration.ScheduleMigrationInterrupts(from, to)
+	if err != nil {
+		return err
+	}
+
+	_, err = multiversion.PlanMigration(from, to, versionRange, interrupts)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func setupConfigurationServer(ctx context.Context, logger log.Logger) (context.CancelFunc, error) {
 	serveMux := http.NewServeMux()
 	router := mux.NewRouter().PathPrefix("/.internal").Subrouter()
 	middleware := httpapi.JsonMiddleware(&httpapi.ErrorHandler{
@@ -71,16 +113,13 @@ func tryAutoUpgrade(ctx context.Context, logger log.Logger, db database.DB) (err
 	}
 	listener, err := httpserver.NewListener(httpAddrInternal)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	confServer := httpserver.New(listener, server)
-	defer confServer.Stop()
 
 	goroutine.Go(func() {
 		confServer.Start()
 	})
 
-	// ...
-
-	return errors.New("MIGRATION SUCCEEDED, RESTARTING")
+	return confServer.Stop, nil
 }

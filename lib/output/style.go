@@ -25,6 +25,7 @@ type style struct{ code string }
 func (s *style) String() string { return s.code }
 
 var (
+	StyleEmpty      = &style{""}
 	StyleReset      = &style{"\033[0m"}
 	StyleLogo       = Fg256Color(57)
 	StylePending    = Fg256Color(4)

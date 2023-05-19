@@ -25,6 +25,8 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/conf/deploy"
 	"github.com/sourcegraph/sourcegraph/internal/database"
 	"github.com/sourcegraph/sourcegraph/internal/database/migration/cliutil"
+	"github.com/sourcegraph/sourcegraph/internal/database/migration/multiversion"
+	"github.com/sourcegraph/sourcegraph/internal/database/migration/runner"
 	"github.com/sourcegraph/sourcegraph/internal/database/migration/schemas"
 	"github.com/sourcegraph/sourcegraph/internal/env"
 	"github.com/sourcegraph/sourcegraph/internal/lazyregexp"
@@ -269,7 +271,8 @@ func (r *siteConfigurationResolver) History(ctx context.Context, args *graphqlut
 func (r *schemaResolver) UpdateSiteConfiguration(ctx context.Context, args *struct {
 	LastID int32
 	Input  string
-}) (bool, error) {
+},
+) (bool, error) {
 	// 🚨 SECURITY: The site configuration contains secret tokens and credentials,
 	// so only admins may view it.
 	if err := auth.CheckCurrentUserIsSiteAdmin(ctx, r.db); err != nil {
@@ -345,16 +348,16 @@ type upgradeReadinessResolver struct {
 
 	initOnce    sync.Once
 	initErr     error
-	runner      cliutil.Runner
+	runner      *runner.Runner
 	version     string
 	schemaNames []string
 }
 
-var devSchemaFactory = cliutil.NewExpectedSchemaFactory(
+var devSchemaFactory = schemas.NewExpectedSchemaFactory(
 	"Local file",
-	[]cliutil.NamedRegexp{{Regexp: lazyregexp.New(`^dev$`)}},
+	[]schemas.NamedRegexp{{Regexp: lazyregexp.New(`^dev$`)}},
 	func(filename, _ string) string { return filename },
-	cliutil.ReadSchemaFromFile,
+	schemas.ReadSchemaFromFile,
 )
 
 var schemaFactories = append(
@@ -365,9 +368,9 @@ var schemaFactories = append(
 
 var insidersVersionPattern = lazyregexp.New(`^[\w-]+_\d{4}-\d{2}-\d{2}_\d+\.\d+-(\w+)$`)
 
-func (r *upgradeReadinessResolver) init(ctx context.Context) (_ cliutil.Runner, version string, schemaNames []string, _ error) {
+func (r *upgradeReadinessResolver) init(ctx context.Context) (_ *runner.Runner, version string, schemaNames []string, _ error) {
 	r.initOnce.Do(func() {
-		r.runner, r.version, r.schemaNames, r.initErr = func() (cliutil.Runner, string, []string, error) {
+		r.runner, r.version, r.schemaNames, r.initErr = func() (*runner.Runner, string, []string, error) {
 			schemaNames := []string{schemas.Frontend.Name, schemas.CodeIntel.Name}
 			schemaList := []*schemas.Schema{schemas.Frontend, schemas.CodeIntel}
 			if IsCodeInsightsEnabled() {
@@ -375,7 +378,7 @@ func (r *upgradeReadinessResolver) init(ctx context.Context) (_ cliutil.Runner, 
 				schemaList = append(schemaList, schemas.CodeInsights)
 			}
 			observationCtx := observation.NewContext(r.logger)
-			runner, err := migratorshared.NewRunnerWithSchemas(observationCtx, r.logger, schemaNames, schemaList)
+			runner, err := migratorshared.NewRunnerWithSchemas(observationCtx, schemaNames, schemaList)
 			if err != nil {
 				return nil, "", nil, errors.Wrap(err, "new runner")
 			}
@@ -417,8 +420,8 @@ func (r *upgradeReadinessResolver) SchemaDrift(ctx context.Context) (string, err
 
 	var drift bytes.Buffer
 	out := output.NewOutput(&drift, output.OutputOpts{Verbose: true})
-	err = cliutil.CheckDrift(ctx, runner, version, out, true, schemaNames, schemaFactories)
-	if err == cliutil.ErrDatabaseDriftDetected {
+	err = multiversion.CheckDrift(ctx, runner, version, out, true, schemaNames, schemaFactories)
+	if err == multiversion.ErrDatabaseDriftDetected {
 		return drift.String(), nil
 	} else if err != nil {
 		return "", errors.Wrap(err, "check drift")
@@ -477,7 +480,8 @@ func (r *siteResolver) AutoUpgradeEnabled(ctx context.Context) (bool, error) {
 
 func (r *schemaResolver) SetAutoUpgrade(ctx context.Context, args *struct {
 	Enable bool
-}) (*EmptyResponse, error) {
+},
+) (*EmptyResponse, error) {
 	// 🚨 SECURITY: Only site admins can set auto_upgrade readiness
 	if err := auth.CheckCurrentUserIsSiteAdmin(ctx, r.db); err != nil {
 		return &EmptyResponse{}, err

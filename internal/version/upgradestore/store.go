@@ -13,20 +13,20 @@ import (
 	"github.com/sourcegraph/sourcegraph/lib/errors"
 )
 
-// store manages checking and updating the version of the instance that was running prior to an ongoing
+// Store manages checking and updating the version of the instance that was running prior to an ongoing
 // instance upgrade or downgrade operation.
-type store struct {
+type Store struct {
 	db *basestore.Store
 }
 
 // New returns a new version store with the given database handle.
-func New(db database.DB) *store {
+func New(db database.DB) *Store {
 	return NewWith(db.Handle())
 }
 
 // NewWith returns a new version store with the given transactable handle.
-func NewWith(db basestore.TransactableHandle) *store {
-	return &store{
+func NewWith(db basestore.TransactableHandle) *Store {
+	return &Store{
 		db: basestore.NewWithHandle(db),
 	}
 }
@@ -34,7 +34,7 @@ func NewWith(db basestore.TransactableHandle) *store {
 // GetFirstServiceVersion returns the first version registered for the given Sourcegraph service. This
 // method will return a false-valued flag if UpdateServiceVersion has never been called for the given
 // service.
-func (s *store) GetFirstServiceVersion(ctx context.Context, service string) (string, bool, error) {
+func (s *Store) GetFirstServiceVersion(ctx context.Context, service string) (string, bool, error) {
 	version, ok, err := basestore.ScanFirstString(s.db.Query(ctx, sqlf.Sprintf(getFirstServiceVersionQuery, service)))
 	return version, ok, filterMissingRelationError(err)
 }
@@ -46,7 +46,7 @@ SELECT first_version FROM versions WHERE service = %s
 // GetServiceVersion returns the previous version registered for the given Sourcegraph service. This
 // method will return a false-valued flag if UpdateServiceVersion has never been called for the given
 // service.
-func (s *store) GetServiceVersion(ctx context.Context, service string) (string, bool, error) {
+func (s *Store) GetServiceVersion(ctx context.Context, service string) (string, bool, error) {
 	version, ok, err := basestore.ScanFirstString(s.db.Query(ctx, sqlf.Sprintf(getServiceVersionQuery, service)))
 	return version, ok, filterMissingRelationError(err)
 }
@@ -57,18 +57,18 @@ SELECT version FROM versions WHERE service = %s
 
 // ValidateUpgrade enforces our documented upgrade policy and will return an error (performing no side-effects)
 // if the upgrade is between two unsupported versions. See https://docs.sourcegraph.com/#upgrading-sourcegraph.
-func (s *store) ValidateUpgrade(ctx context.Context, service, version string) error {
+func (s *Store) ValidateUpgrade(ctx context.Context, service, version string) error {
 	return s.updateServiceVersion(ctx, service, version, false)
 }
 
 // UpdateServiceVersion updates the latest version for the given Sourcegraph service. This method also enforces
 // our documented upgrade policy and will return an error (performing no side-effects) if the upgrade is between
 // two unsupported versions. See https://docs.sourcegraph.com/#upgrading-sourcegraph.
-func (s *store) UpdateServiceVersion(ctx context.Context, service, version string) error {
+func (s *Store) UpdateServiceVersion(ctx context.Context, service, version string) error {
 	return s.updateServiceVersion(ctx, service, version, true)
 }
 
-func (s *store) updateServiceVersion(ctx context.Context, service, version string, update bool) error {
+func (s *Store) updateServiceVersion(ctx context.Context, service, version string, update bool) error {
 	prev, _, err := basestore.ScanFirstString(s.db.Query(ctx, sqlf.Sprintf(updateServiceVersionSelectQuery, service)))
 	if err != nil {
 		if !update && isMissingRelation(err) {
@@ -113,7 +113,7 @@ WHERE versions.version = %s
 // SetServiceVersion updates the latest version for the given Sourcegraph service. This method also enforces
 // our documented upgrade policy and will return an error (performing no side-effects) if the upgrade is between
 // two unsupported versions. See https://docs.sourcegraph.com/#upgrading-sourcegraph.
-func (s *store) SetServiceVersion(ctx context.Context, service, version string) error {
+func (s *Store) SetServiceVersion(ctx context.Context, service, version string) error {
 	return s.db.Exec(ctx, sqlf.Sprintf(setServiceVersionQuery, version, time.Now().UTC(), service))
 }
 
@@ -143,7 +143,7 @@ func isMissingRelation(err error) bool {
 }
 
 // GetAutoUpgrade gets the current value of versions.version and versions.auto_upgrade in the frontend database.
-func (s *store) GetAutoUpgrade(ctx context.Context) (version string, enabled bool, err error) {
+func (s *Store) GetAutoUpgrade(ctx context.Context) (version string, enabled bool, err error) {
 	if err = s.db.QueryRow(ctx, sqlf.Sprintf(getAutoUpgradeQuery)).Scan(&version, &enabled); err != nil {
 		return "", false, errors.Wrap(err, "failed to get frontend version and auto_upgrade state")
 	}
@@ -155,7 +155,7 @@ SELECT version, auto_upgrade FROM versions WHERE service = 'frontend'
 `
 
 // SetAutoUpgrade sets the value of versions.auto_upgrade in the frontend database.
-func (s *store) SetAutoUpgrade(ctx context.Context, enable bool) error {
+func (s *Store) SetAutoUpgrade(ctx context.Context, enable bool) error {
 	if err := s.db.Exec(ctx, sqlf.Sprintf(setAutoUpgradeQuery, enable)); err != nil {
 		return errors.Wrap(err, "failed to set auto_upgrade")
 	}

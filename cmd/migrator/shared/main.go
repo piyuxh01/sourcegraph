@@ -12,6 +12,7 @@ import (
 
 	connections "github.com/sourcegraph/sourcegraph/internal/database/connections/live"
 	"github.com/sourcegraph/sourcegraph/internal/database/migration/cliutil"
+	"github.com/sourcegraph/sourcegraph/internal/database/migration/runner"
 	"github.com/sourcegraph/sourcegraph/internal/database/migration/schemas"
 	"github.com/sourcegraph/sourcegraph/internal/database/migration/store"
 	"github.com/sourcegraph/sourcegraph/internal/database/postgresdsn"
@@ -27,7 +28,7 @@ var out = output.NewOutput(os.Stdout, output.OutputOpts{})
 
 // NewRunnerWithSchemas returns new migrator runner with given scheme names and
 // definitions.
-func NewRunnerWithSchemas(observationCtx *observation.Context, logger log.Logger, schemaNames []string, schemas []*schemas.Schema) (cliutil.Runner, error) {
+func NewRunnerWithSchemas(observationCtx *observation.Context, schemaNames []string, schemas []*schemas.Schema) (*runner.Runner, error) {
 	dsns, err := postgresdsn.DSNsBySchema(schemaNames)
 	if err != nil {
 		return nil, err
@@ -43,20 +44,20 @@ func NewRunnerWithSchemas(observationCtx *observation.Context, logger log.Logger
 	storeFactory := func(db *sql.DB, migrationsTable string) connections.Store {
 		return connections.NewStoreShim(store.NewWithDB(observationCtx, db, migrationsTable))
 	}
-	r, err := connections.RunnerFromDSNsWithSchemas(out, logger, dsns, appName, storeFactory, schemas)
+	r, err := connections.RunnerFromDSNsWithSchemas(out, observationCtx.Logger, dsns, appName, storeFactory, schemas)
 	if err != nil {
 		return nil, err
 	}
 
-	return cliutil.NewShim(r), nil
+	return r, nil
 }
 
 // DefaultSchemaFactories is a list of schema factories to be used in
 // non-exceptional cases.
-var DefaultSchemaFactories = []cliutil.ExpectedSchemaFactory{
-	cliutil.LocalExpectedSchemaFactory,
-	cliutil.GitHubExpectedSchemaFactory,
-	cliutil.GCSExpectedSchemaFactory,
+var DefaultSchemaFactories = []schemas.ExpectedSchemaFactory{
+	schemas.LocalExpectedSchemaFactory,
+	schemas.GitHubExpectedSchemaFactory,
+	schemas.GCSExpectedSchemaFactory,
 }
 
 func Start(logger log.Logger, registerEnterpriseMigrators registerMigratorsUsingConfAndStoreFactoryFunc) error {
@@ -64,10 +65,10 @@ func Start(logger log.Logger, registerEnterpriseMigrators registerMigratorsUsing
 
 	outputFactory := func() *output.Output { return out }
 
-	newRunnerWithSchemas := func(schemaNames []string, schemas []*schemas.Schema) (cliutil.Runner, error) {
-		return NewRunnerWithSchemas(observationCtx, logger, schemaNames, schemas)
+	newRunnerWithSchemas := func(schemaNames []string, schemas []*schemas.Schema) (*runner.Runner, error) {
+		return NewRunnerWithSchemas(observationCtx, schemaNames, schemas)
 	}
-	newRunner := func(schemaNames []string) (cliutil.Runner, error) {
+	newRunner := func(schemaNames []string) (*runner.Runner, error) {
 		return newRunnerWithSchemas(schemaNames, schemas.Schemas)
 	}
 

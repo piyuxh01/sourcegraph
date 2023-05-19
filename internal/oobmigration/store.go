@@ -381,6 +381,24 @@ WHERE m.id = %s
 ORDER BY e.created desc
 `
 
+func (s *Store) GetByIDS(ctx context.Context, ids []int) (_ []Migration, err error) {
+	migrations := make([]Migration, 0, len(ids))
+	for _, id := range ids {
+		migration, ok, err := s.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, errors.Newf("unknown migration id %d", id)
+		}
+
+		migrations = append(migrations, migration)
+	}
+	sort.Slice(migrations, func(i, j int) bool { return migrations[i].ID < migrations[j].ID })
+
+	return migrations, nil
+}
+
 // ReturnEnterpriseMigrations is set by the enterprise application to enable the
 // inclusion of enterprise-only migration records in the output of oobmigration.List.
 var ReturnEnterpriseMigrations = false
