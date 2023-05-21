@@ -4,7 +4,7 @@
 
 # TODO: See if we can switch back to cgr.dev/chainguard/go:latest
 # hadolint ignore=DL3007
-FROM cgr.dev/chainguard/go:latest AS symbols-build
+FROM cgr.dev/chainguard/go:latest@sha256:65ac29b8a54fc90c6bc063c85bffdec756b1a3580b2d00bf74cdb0cda9edb8c4 AS symbols-build
 # hadolint ignore=DL3002
 USER root
 
